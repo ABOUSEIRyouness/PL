@@ -1,0 +1,1379 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classroom Activity Timer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* Pulse effect for low time */
+        .pulse-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+            width: 100%;
+            min-height: 120px;
+        }
+
+        .pulse {
+            animation: pulse 1.5s infinite;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.1);
+            z-index: 0;
+            pointer-events: none;
+            max-width: 300px;
+            max-height: 300px;
+            opacity: 0;
+        }
+        
+        .student-timer {
+            position: relative;
+            z-index: 1;
+            font-size: 3.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+            padding: 20px;
+            border-radius: 15px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        .time-warning {
+            color: #ff4444 !important;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.7) !important;
+            animation: pulseText 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0.8;
+            }
+            70% {
+                transform: translate(-50%, -50%) scale(1.2);
+                opacity: 0;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(0.9);
+                opacity: 0;
+            }
+        }
+
+        .time-warning {
+            animation: timeWarning 1s infinite alternate;
+        }
+
+        @keyframes pulseText {
+            from {
+                transform: scale(1);
+                opacity: 1;
+            }
+            to {
+                transform: scale(1.05);
+                opacity: 0.9;
+            }
+        }
+        
+        @keyframes timeWarning {
+            from {
+                color: var(--text-primary);
+                text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+            }
+            to {
+                color: #ff6b6b;
+                text-shadow: 0 0 15px rgba(255, 0, 0, 0.8);
+            }
+        }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #16213e;
+            --cyan: #00d4ff;
+            --magenta: #ff0080;
+            --purple: #8b5cf6;
+            --text-primary: #ffffff;
+            --text-secondary: #b4b4b4;
+            --border: #2a2a4a;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            --glow: 0 0 20px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+            transition: all 0.2s ease;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 212, 255, 0.3);
+            border: 2px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        ::-webkit-scrollbar-thumb:active {
+            background: var(--cyan);
+        }
+        
+        /* Firefox scrollbar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) rgba(255, 255, 255, 0.03);
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) rgba(255, 255, 255, 0.03);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .retro-title {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(1.2rem, 3vw, 2rem);
+            text-shadow: var(--glow) var(--cyan);
+        }
+
+        .timer-display {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(3rem, 8vw, 6rem);
+            text-align: center;
+            margin: 2rem 0;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: var(--text-primary);
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            min-width: 100px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+            box-shadow: var(--glow) var(--cyan);
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--cyan), var(--purple));
+            border: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, var(--magenta), #ff4444);
+            border: none;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            min-width: auto;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .view-toggle {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .teacher-view {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 2rem;
+        }
+
+        .timer-section {
+            padding: 2rem;
+        }
+
+        .timer-controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+
+        .time-adjust {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+
+        .activity-sidebar {
+            padding: 1.5rem;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            position: relative;
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+            margin-right: -10px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+        }
+        
+        .activity-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .activity-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .activity-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 212, 255, 0.3);
+        }
+        
+        .activity-item {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .activity-item.moving {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease, box-shadow 0.3s ease !important;
+            z-index: 10;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2) !important;
+        }
+
+        .activity-item {
+            padding: 1rem;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+            transform-origin: top;
+            will-change: transform, max-height, opacity, box-shadow;
+            background: rgba(255, 255, 255, 0.02);
+        }
+        
+        .activity-item .activity-details {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transform: translateY(-10px);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: max-height, opacity, transform;
+            padding-left: 5px;
+            border-left: 2px solid transparent;
+        }
+        
+        .activity-item.expanded .activity-details {
+            max-height: 500px;
+            opacity: 1;
+            margin-top: 0.75rem;
+            transform: translateY(0);
+            border-left-color: var(--cyan);
+        }
+
+        .activity-item.active {
+            border-color: var(--cyan);
+            box-shadow: var(--glow) var(--cyan);
+        }
+
+        .activity-item.work { background: rgba(0, 212, 255, 0.1); }
+        .activity-item.break { background: rgba(255, 0, 128, 0.1); }
+        .activity-item.transition { background: rgba(139, 92, 246, 0.1); }
+
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            padding: 8px 0;
+        }
+
+        .activity-header {
+            position: relative;
+            padding-left: 40px; /* Add padding for the position number */
+        }
+
+        .activity-header h4 {
+            margin: 0;
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 10px;
+            cursor: pointer;
+            transition: color 0.2s ease;
+            padding: 8px 0; /* Move padding from activity-header to h4 */
+        }
+        
+        .activity-position {
+            position: absolute;
+            left: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-secondary);
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .activity-type {
+            margin-right: 10px; /* Add some spacing between type and controls */
+        }
+        
+        .activity-header h4:before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%) rotate(0deg);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+        
+        .activity-item.expanded .activity-header h4:before {
+            transform: translateY(-50%) rotate(180deg);
+        }
+        
+        .activity-header h4:hover {
+            color: var(--cyan);
+        }
+        
+        .activity-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .move-buttons {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-left: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 4px 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 32px;
+        }
+        
+        .move-buttons button {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin: 0;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            border-radius: 4px;
+        }
+        
+        .move-divider {
+            width: 16px;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 2px 0;
+        }
+        
+        .move-buttons button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 0;
+            border-radius: 4px;
+        }
+        
+        .move-buttons button:hover::before {
+            opacity: 0.1;
+        }
+        
+        .move-buttons button i {
+            position: relative;
+            z-index: 1;
+            font-size: 12px;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+        }
+        
+        .move-buttons button:hover i {
+            color: var(--cyan);
+            transform: scale(1.2);
+        }
+        
+        .move-buttons button:active i {
+            transform: scale(0.9);
+        }
+        
+        .move-buttons button:disabled {
+            opacity: 0.2;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        .move-buttons button:disabled i {
+            color: var(--text-secondary) !important;
+            transform: none !important;
+        }
+
+        .toggle-collapse {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 5px;
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+            margin-left: 10px;
+        }
+
+        .activity-item.collapsed .toggle-collapse {
+            transform: rotate(-90deg);
+        }
+
+        .activity-title {
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .activity-type {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .type-work { background: var(--cyan); color: var(--bg-primary); }
+        .type-break { background: var(--magenta); color: var(--bg-primary); }
+        .type-transition { background: var(--purple); color: var(--text-primary); }
+
+        .activity-duration {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .activity-controls {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .student-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .student-activity-title {
+            font-family: 'Press Start 2P', monospace;
+            font-size: clamp(1.5rem, 4vw, 3rem);
+            margin-bottom: 1rem;
+        }
+
+        .student-timer {
+            font-size: clamp(4rem, 12vw, 8rem);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin: 2rem 0;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan), var(--purple));
+            transition: width 1s ease;
+            border-radius: 4px;
+        }
+
+        .add-activity-form {
+            padding: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.2);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: var(--bg-tertiary);
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        @media (max-width: 768px) {
+            .teacher-view {
+                grid-template-columns: 1fr;
+            }
+            
+            .activity-sidebar {
+                order: -1;
+                max-height: none;
+            }
+            
+            .timer-controls {
+                gap: 0.5rem;
+            }
+            
+            .btn {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0.5rem;
+            }
+            
+            .activity-controls {
+                justify-content: center;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .timer-paused {
+            animation: pulse 1s infinite;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .edit-mode {
+            background: rgba(255, 165, 0, 0.1);
+            border-color: #ffa500;
+        }
+
+        .inline-edit {
+            background: transparent;
+            border: 1px dashed var(--cyan);
+            border-radius: 4px;
+            padding: 0.25rem;
+            color: var(--text-primary);
+            font-size: inherit;
+            font-weight: inherit;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Audio elements for sound effects -->
+    <audio id="warningSound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3" type="audio/mp3">
+    </audio>
+    <audio id="timesUpSound" preload="auto">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2588/2588-preview.mp3" type="audio/mp3">
+    </audio>
+
+    <div class="container">
+        <header class="header">
+            <h1 class="retro-title">Classroom Timer</h1>
+            <div class="view-toggle">
+                <button class="btn btn-primary" id="teacherViewBtn">Teacher</button>
+                <button class="btn" id="studentViewBtn">Student</button>
+            </div>
+        </header>
+
+        <main class="teacher-view" id="teacherView">
+            <section class="timer-section glass-card">
+                <div class="current-activity">
+                    <h2 id="currentActivityTitle">No Activity</h2>
+                    <div class="timer-display" id="timerDisplay">00:00</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+
+                <div class="timer-controls">
+                    <button class="btn btn-primary" id="startBtn">Start</button>
+                    <button class="btn" id="pauseBtn">Pause</button>
+                    <button class="btn" id="skipBtn">Skip</button>
+                    <button class="btn btn-danger" id="resetBtn">Reset</button>
+                </div>
+
+                <div class="time-adjust">
+                    <button class="btn btn-small" id="subtractMinute">-1 min</button>
+                    <span>Adjust Current Activity</span>
+                    <button class="btn btn-small" id="addMinute">+1 min</button>
+                </div>
+
+                <div class="activity-progress">
+                    <h3>Progress: <span id="activityProgress">0/0</span></h3>
+                </div>
+            </section>
+
+            <aside class="activity-sidebar glass-card">
+                <h3>Activity Sequence</h3>
+                <div class="activity-list" id="activityList"></div>
+
+                <div class="add-activity-form glass-card">
+                    <h4>Add New Activity</h4>
+                    <div class="form-group">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-input" id="newActivityTitle" placeholder="Activity name">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" id="newActivityType">
+                            <option value="work">Work</option>
+                            <option value="break">Break</option>
+                            <option value="transition">Transition</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Duration (minutes)</label>
+                        <input type="number" class="form-input" id="newActivityDuration" min="1" value="5">
+                    </div>
+                    <button class="btn btn-primary" id="addActivityBtn">Add Activity</button>
+                </div>
+            </aside>
+        </main>
+
+        <main class="student-view hidden" id="studentView">
+            <div class="student-activity-title" id="studentActivityTitle">No Activity</div>
+            <div class="pulse-container" id="pulseEffect">
+                <div class="timer-display student-timer" id="studentTimerDisplay">00:00</div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="studentProgressFill"></div>
+            </div>
+            <div class="activity-progress">
+                <h3>Activity <span id="studentActivityProgress">0 of 0</span></h3>
+            </div>
+        </main>
+    </div>
+
+    <div class="toast" id="toast">
+        <span id="toastMessage"></span>
+        <button class="btn btn-small" id="undoBtn">Undo</button>
+    </div>
+
+    <script>
+        class ClassroomTimer {
+            constructor() {
+                this.activities = [];
+                this.currentActivityIndex = 0;
+                this.timeRemaining = 0;
+                this.isRunning = false;
+                this.isPaused = false;
+                this.timer = null;
+                this.currentView = 'teacher';
+                this.undoStack = [];
+                
+                this.init();
+            }
+
+            init() {
+                this.loadFromStorage();
+                this.bindEvents();
+                this.updateDisplay();
+                this.updateActivityList();
+            }
+
+            bindEvents() {
+                document.getElementById('teacherViewBtn').addEventListener('click', () => this.switchView('teacher'));
+                document.getElementById('studentViewBtn').addEventListener('click', () => this.switchView('student'));
+
+                document.getElementById('startBtn').addEventListener('click', () => this.start());
+                document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
+                document.getElementById('skipBtn').addEventListener('click', () => this.skip());
+                document.getElementById('resetBtn').addEventListener('click', () => this.reset());
+
+                document.getElementById('addMinute').addEventListener('click', () => this.adjustTime(60));
+                document.getElementById('subtractMinute').addEventListener('click', () => this.adjustTime(-60));
+
+                document.getElementById('addActivityBtn').addEventListener('click', () => this.addActivity());
+
+                document.getElementById('undoBtn').addEventListener('click', () => this.undo());
+
+                document.getElementById('newActivityTitle').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.addActivity();
+                });
+            }
+
+            switchView(view) {
+                this.currentView = view;
+                const teacherView = document.getElementById('teacherView');
+                const studentView = document.getElementById('studentView');
+                const teacherBtn = document.getElementById('teacherViewBtn');
+                const studentBtn = document.getElementById('studentViewBtn');
+
+                if (view === 'teacher') {
+                    teacherView.classList.remove('hidden');
+                    studentView.classList.add('hidden');
+                    teacherBtn.classList.add('btn-primary');
+                    studentBtn.classList.remove('btn-primary');
+                } else {
+                    teacherView.classList.add('hidden');
+                    studentView.classList.remove('hidden');
+                    studentBtn.classList.add('btn-primary');
+                    teacherBtn.classList.remove('btn-primary');
+                }
+
+                this.updateDisplay();
+            }
+
+            start() {
+                if (this.activities.length === 0) {
+                    this.showToast('Add activities first!');
+                    return;
+                }
+
+                if (this.currentActivityIndex >= this.activities.length) {
+                    this.currentActivityIndex = 0;
+                }
+
+                if (this.timeRemaining === 0) {
+                    this.timeRemaining = this.activities[this.currentActivityIndex].duration * 60;
+                }
+
+                this.isRunning = true;
+                this.isPaused = false;
+                this.timer = setInterval(() => this.tick(), 1000);
+                this.updateDisplay();
+                this.saveToStorage();
+            }
+
+            pause() {
+                this.isPaused = !this.isPaused;
+                if (this.isPaused) {
+                    clearInterval(this.timer);
+                } else {
+                    this.timer = setInterval(() => this.tick(), 1000);
+                }
+                this.updateDisplay();
+            }
+
+            skip() {
+                this.pushUndo('skip', {
+                    activityIndex: this.currentActivityIndex,
+                    timeRemaining: this.timeRemaining
+                });
+
+                this.nextActivity();
+                this.showToast('Activity skipped', true);
+            }
+
+            reset() {
+                this.pushUndo('reset', {
+                    activityIndex: this.currentActivityIndex,
+                    timeRemaining: this.timeRemaining,
+                    isRunning: this.isRunning
+                });
+
+                clearInterval(this.timer);
+                this.isRunning = false;
+                this.isPaused = false;
+                this.currentActivityIndex = 0;
+                this.timeRemaining = this.activities.length > 0 ? this.activities[0].duration * 60 : 0;
+                this.updateDisplay();
+                this.updateActivityList();
+                this.saveToStorage();
+                this.showToast('Timer reset', true);
+            }
+
+            tick() {
+                if (this.isPaused) return;
+
+                this.timeRemaining--;
+                this.updateDisplay();
+
+                // Play warning sound and show visual feedback when time is running low
+                if (this.timeRemaining === 10) {
+                    const warningSound = document.getElementById('warningSound');
+                    if (warningSound) {
+                        warningSound.volume = 0.5;
+                        warningSound.play().catch(e => console.log('Could not play warning sound:', e));
+                    }
+                    
+                    // Add pulse effect
+                    const pulseEffect = document.getElementById('pulseEffect');
+                    if (pulseEffect) {
+                        const pulse = document.createElement('div');
+                        pulse.className = 'pulse';
+                        pulseEffect.appendChild(pulse);
+                        
+                        // Remove pulse element after animation completes
+                        setTimeout(() => {
+                            if (pulseEffect.contains(pulse)) {
+                                pulseEffect.removeChild(pulse);
+                            }
+                        }, 1500);
+                    }
+                }
+                
+                // Add time warning class when time is critical (last 10 seconds)
+                const timerDisplay = document.getElementById('studentTimerDisplay');
+                if (timerDisplay) {
+                    if (this.timeRemaining <= 10) {
+                        timerDisplay.classList.add('time-warning');
+                    } else {
+                        timerDisplay.classList.remove('time-warning');
+                    }
+                }
+
+                if (this.timeRemaining <= 0) {
+                    // Play time's up sound
+                    const timesUpSound = document.getElementById('timesUpSound');
+                    if (timesUpSound) {
+                        timesUpSound.volume = 0.5;
+                        timesUpSound.play().catch(e => console.log('Could not play time up sound:', e));
+                    }
+                    this.nextActivity();
+                }
+
+                this.saveToStorage();
+            }
+
+            nextActivity() {
+                this.currentActivityIndex++;
+                if (this.currentActivityIndex >= this.activities.length) {
+                    clearInterval(this.timer);
+                    this.isRunning = false;
+                    this.timeRemaining = 0;
+                    this.showToast('All activities completed! 🎉');
+                } else {
+                    this.timeRemaining = this.activities[this.currentActivityIndex].duration * 60;
+                }
+                this.updateDisplay();
+                this.updateActivityList();
+            }
+
+            adjustTime(seconds) {
+                if (this.activities.length === 0 || this.currentActivityIndex >= this.activities.length) return;
+
+                this.timeRemaining = Math.max(0, this.timeRemaining + seconds);
+                this.updateDisplay();
+                this.saveToStorage();
+            }
+
+            addActivity() {
+                const title = document.getElementById('newActivityTitle').value.trim();
+                const type = document.getElementById('newActivityType').value;
+                const duration = parseInt(document.getElementById('newActivityDuration').value);
+
+                if (!title || duration < 1) {
+                    this.showToast('Please enter a valid title and duration');
+                    return;
+                }
+
+                const activity = { title, type, duration };
+                this.activities.push(activity);
+
+                if (this.activities.length === 1 && !this.isRunning) {
+                    this.timeRemaining = duration * 60;
+                }
+
+                document.getElementById('newActivityTitle').value = '';
+                document.getElementById('newActivityDuration').value = '5';
+
+                this.updateDisplay();
+                this.updateActivityList();
+                this.saveToStorage();
+                this.showToast('Activity added');
+            }
+
+            deleteActivity(index) {
+                this.pushUndo('delete', {
+                    activity: { ...this.activities[index] },
+                    index: index
+                });
+
+                this.activities.splice(index, 1);
+
+                if (this.currentActivityIndex >= index && this.currentActivityIndex > 0) {
+                    this.currentActivityIndex--;
+                }
+
+                if (index === this.currentActivityIndex && this.isRunning) {
+                    if (this.activities.length > 0) {
+                        this.timeRemaining = this.activities[this.currentActivityIndex].duration * 60;
+                    } else {
+                        this.reset();
+                    }
+                }
+
+                this.updateDisplay();
+                this.updateActivityList();
+                this.saveToStorage();
+                this.showToast('Activity deleted', true);
+            }
+
+            async moveActivity(index, direction) {
+                const newIndex = index + direction;
+                if (newIndex < 0 || newIndex >= this.activities.length) {
+                    return;
+                }
+
+                // Get DOM elements
+                const listElement = document.getElementById('activityList');
+                const items = Array.from(listElement.children);
+                const item = items[index];
+                const targetItem = items[newIndex];
+                
+                // Add moving class for visual feedback
+                item.classList.add('moving');
+                
+                // Calculate the distance to move
+                const itemRect = item.getBoundingClientRect();
+                const targetRect = targetItem.getBoundingClientRect();
+                const distance = direction > 0 ? 
+                    targetRect.bottom - itemRect.top + 16 :  // 16px for gap
+                    targetRect.top - itemRect.bottom - 16;
+                
+                // Prepare for animation
+                item.style.transition = 'transform 0.3s ease, box-shadow 0.3s ease';
+                item.style.transform = `translateY(${distance}px)`;
+                
+                // If moving down, the item below needs to move up
+                if (direction > 0 && items[newIndex + 1]) {
+                    items[newIndex + 1].style.transition = 'transform 0.3s ease';
+                    items[newIndex + 1].style.transform = 'translateY(-100%)';
+                }
+                
+                // Wait for the animation to complete
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Update the data
+                const activity = this.activities[index];
+                this.activities.splice(index, 1);
+                this.activities.splice(newIndex, 0, activity);
+                
+                // Update the display
+                this.updateDisplay();
+                this.updateActivityList();
+                this.saveToStorage();
+                
+                // Remove moving class and reset transforms
+                item.classList.remove('moving');
+                item.style.transform = '';
+                item.style.transition = '';
+                if (direction > 0 && items[newIndex + 1]) {
+                    items[newIndex + 1].style.transform = '';
+                    items[newIndex + 1].style.transition = '';
+                }
+                
+                // Update current activity index if needed
+                if (this.currentActivityIndex === index) {
+                    this.currentActivityIndex = newIndex;
+                } else if (this.currentActivityIndex === newIndex) {
+                    this.currentActivityIndex = index;
+                }
+            }
+
+            editActivity(index, field, value) {
+                if (field === 'duration') {
+                    value = parseInt(value);
+                    if (value < 1) return;
+                    
+                    if (index === this.currentActivityIndex) {
+                        const oldDuration = this.activities[index].duration * 60;
+                        const newDuration = value * 60;
+                        const ratio = newDuration / oldDuration;
+                        this.timeRemaining = Math.round(this.timeRemaining * ratio);
+                    }
+                }
+
+                this.activities[index][field] = value;
+                this.updateDisplay();
+                this.updateActivityList();
+                this.saveToStorage();
+            }
+
+            updateDisplay() {
+                const currentActivity = this.activities[this.currentActivityIndex];
+                const title = currentActivity ? currentActivity.title : 'No Activity';
+                const minutes = Math.floor(this.timeRemaining / 60);
+                const seconds = this.timeRemaining % 60;
+                const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+                document.getElementById('currentActivityTitle').textContent = title;
+                document.getElementById('timerDisplay').textContent = timeStr;
+                document.getElementById('studentActivityTitle').textContent = title;
+                
+                // Update student timer display with time warning class if needed
+                const studentTimer = document.getElementById('studentTimerDisplay');
+                studentTimer.textContent = timeStr;
+                
+                // Update progress bar
+                let progress = 0;
+                if (currentActivity && currentActivity.duration > 0) {
+                    progress = ((currentActivity.duration * 60 - this.timeRemaining) / (currentActivity.duration * 60)) * 100;
+                }
+                
+                const progressFill = document.getElementById('studentProgressFill');
+                progressFill.style.width = `${progress}%`;
+                
+                // Update progress bar color based on time remaining
+                if (this.timeRemaining <= 10) {
+                    progressFill.style.background = 'linear-gradient(90deg, #ff6b6b 0%, #ff1a1a 100%)';
+                    progressFill.style.boxShadow = '0 0 15px rgba(255, 0, 0, 0.5)';
+                } else {
+                    progressFill.style.background = 'linear-gradient(90deg, #00d4ff 0%, #0077ff 100%)';
+                    progressFill.style.boxShadow = '0 0 10px rgba(0, 212, 255, 0.5)';
+                }
+
+                // Update activity progress
+                const progressText = this.activities.length > 0 ? 
+                    `${this.currentActivityIndex + 1} of ${this.activities.length}` : '0 of 0';
+                document.getElementById('studentActivityProgress').textContent = progressText;
+
+                // Update buttons
+                document.getElementById('startBtn').disabled = this.isRunning || this.activities.length === 0;
+                document.getElementById('pauseBtn').disabled = !this.isRunning || this.activities.length === 0;
+                document.getElementById('skipBtn').disabled = !this.isRunning || this.activities.length === 0;
+                document.getElementById('resetBtn').disabled = !this.isRunning && !this.isPaused && this.currentActivityIndex === 0;
+                document.getElementById('pauseBtn').textContent = this.isPaused ? 'Resume' : 'Pause';
+
+                // Update background gradient based on activity type
+                if (currentActivity && this.currentView === 'student') {
+                    const colors = {
+                        work: 'rgba(0, 212, 255, 0.1)',
+                        break: 'rgba(255, 0, 128, 0.1)',
+                        transition: 'rgba(139, 92, 246, 0.1)'
+                    };
+                    document.getElementById('studentView').style.background = 
+                        `linear-gradient(135deg, var(--bg-primary) 0%, ${colors[currentActivity.type]} 50%, var(--bg-secondary) 100%)`;
+                }
+            }
+
+            updateActivityList() {
+                const listElement = document.getElementById('activityList');
+                listElement.innerHTML = '';
+
+                this.activities.forEach((activity, index) => {
+                    const item = document.createElement('div');
+                    item.className = `activity-item ${activity.type} ${index === 0 ? 'expanded' : ''}`;
+                    if (index === this.currentActivityIndex) {
+                        item.classList.add('active');
+                        item.classList.remove('collapsed');
+                    }
+
+                    item.innerHTML = `
+                    <div class="activity-header" onclick="this.parentElement.classList.toggle('expanded'); event.stopPropagation();">
+                        <span class="activity-position">${index + 1}</span>
+                        <h4>${activity.title}</h4>
+                        <span class="activity-type type-${activity.type}">${activity.type}</span>
+                        <div class="activity-header-controls" onclick="event.stopPropagation()">
+                            <div class="move-buttons" onclick="event.stopPropagation()">
+                                <button class="move-up" onclick="timer.moveActivity(${index}, -1)" ${index === 0 ? 'disabled' : ''}>
+                                    <i class="fas fa-chevron-up"></i>
+                                </button>
+                                <div class="move-divider"></div>
+                                <button class="move-down" onclick="timer.moveActivity(${index}, 1)" ${index === this.activities.length - 1 ? 'disabled' : ''}>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                        <div class="activity-details">
+                            <div class="activity-duration">
+                                <label>Duration: </label>
+                                <input type="number" class="inline-edit" value="${activity.duration}" min="1" 
+                                       onchange="timer.editActivity(${index}, 'duration', this.value)"> minutes
+                            </div>
+                            <div class="activity-controls">
+                                <select class="form-select" onchange="timer.editActivity(${index}, 'type', this.value)">
+                                    <option value="work" ${activity.type === 'work' ? 'selected' : ''}>Work</option>
+                                    <option value="break" ${activity.type === 'break' ? 'selected' : ''}>Break</option>
+                                    <option value="transition" ${activity.type === 'transition' ? 'selected' : ''}>Transition</option>
+                                </select>
+                                <!-- Move buttons have been moved to the header -->
+                                <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); timer.deleteActivity(${index})">Delete</button>
+                            </div>
+                        </div>
+                    </div>`;
+
+                    listElement.appendChild(item);
+                });
+            }
+
+            pushUndo(action, data) {
+                this.undoStack.push({ action, data, timestamp: Date.now() });
+                if (this.undoStack.length > 10) {
+                    this.undoStack.shift();
+                }
+            }
+
+            undo() {
+                if (this.undoStack.length === 0) return;
+
+                const lastAction = this.undoStack.pop();
+                const { action, data } = lastAction;
+
+                switch (action) {
+                    case 'delete':
+                        this.activities.splice(data.index, 0, data.activity);
+                        break;
+                    case 'skip':
+                        this.currentActivityIndex = data.activityIndex;
+                        this.timeRemaining = data.timeRemaining;
+                        break;
+                    case 'reset':
+                        this.currentActivityIndex = data.activityIndex;
+                        this.timeRemaining = data.timeRemaining;
+                        if (data.isRunning) {
+                            this.start();
+                        }
+                        break;
+                }
+
+                this.updateDisplay();
+                this.updateActivityList();
+                this.saveToStorage();
+                this.hideToast();
+            }
+
+            showToast(message, showUndo = false) {
+                const toast = document.getElementById('toast');
+                const toastMessage = document.getElementById('toastMessage');
+                const undoBtn = document.getElementById('undoBtn');
+
+                toastMessage.textContent = message;
+                undoBtn.style.display = showUndo ? 'block' : 'none';
+                
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    this.hideToast();
+                }, 3000);
+            }
+
+            hideToast() {
+                document.getElementById('toast').classList.remove('show');
+            }
+
+            saveToStorage() {
+                const data = {
+                    activities: this.activities,
+                    currentActivityIndex: this.currentActivityIndex,
+                    timeRemaining: this.timeRemaining,
+                    isRunning: this.isRunning,
+                    isPaused: this.isPaused
+                };
+                localStorage.setItem('classroomTimer', JSON.stringify(data));
+            }
+
+            loadFromStorage() {
+                const saved = localStorage.getItem('classroomTimer');
+                if (saved) {
+                    try {
+                        const data = JSON.parse(saved);
+                        const wasRunning = data.isRunning && !data.isPaused;
+                        
+                        this.activities = data.activities || [];
+                        this.currentActivityIndex = data.currentActivityIndex || 0;
+                        this.timeRemaining = data.timeRemaining || 0;
+                        this.isRunning = false;
+                        this.isPaused = false;
+
+                        // If timer was running before refresh, restart it
+                        if (wasRunning && this.activities.length > 0) {
+                            // Small delay to ensure DOM is ready
+                            setTimeout(() => {
+                                this.start();
+                                this.showToast('Timer auto-resumed');
+                            }, 500);
+                        }
+                    } catch (e) {
+                        console.error('Error loading from storage:', e);
+                    }
+                }
+            }
+        }
+
+        const timer = new ClassroomTimer();
+
+        if (timer.activities.length === 0) {
+            timer.activities = [
+                { title: "Warm-up Activity", type: "work", duration: 5 },
+                { title: "Break Time", type: "break", duration: 3 },
+                { title: "Main Lesson", type: "work", duration: 20 },
+                { title: "Group Discussion", type: "transition", duration: 10 }
+            ];
+            timer.timeRemaining = timer.activities[0].duration * 60;
+            timer.updateDisplay();
+            timer.updateActivityList();
+            timer.saveToStorage();
+        }
+    </script>
+</body>
+</html>
